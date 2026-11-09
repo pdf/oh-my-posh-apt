@@ -1,0 +1,152 @@
+name: publish
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild and redeploy the site even if nothing new was released
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      publish: ${{ steps.check.outputs.publish }}
+      keepalive: ${{ steps.check.outputs.keepalive }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: check
+        run: scripts/check-release.sh "${FORCE:-false}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+
+  build:
+    needs: check
+    if: needs.check.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq aptly unzip
+      - run: sudo scripts/install-nfpm.sh
+
+      # The release is the durable store for the .debs. A re-run after a later
+      # failure reuses it, or completes it if an upload was interrupted.
+      - name: Create release for this version
+        run: |
+          assets=$(gh release view "$TAG" --json assets --jq '.assets | length' 2>/dev/null || echo none)
+          if [[ $assets == 4 ]]; then
+            echo "release $TAG is already complete"
+            exit 0
+          fi
+          scripts/fetch-upstream.sh "$TAG" build/upstream
+          scripts/build-debs.sh "$TAG" build/upstream build/new-debs
+          if [[ $assets == none ]]; then
+            gh release create "$TAG" build/new-debs/*.deb --target "$GITHUB_SHA" --title "$TAG" \
+              --notes "Unofficial packages of Oh My Posh $TAG. Install with apt, see the README."
+          else
+            gh release upload "$TAG" build/new-debs/*.deb --clobber
+          fi
+
+      - run: scripts/download-published.sh "$GITHUB_REPOSITORY" build/debs
+
+      - name: Import signing key
+        run: printf '%s\n' "$APT_SIGNING_KEY" | gpg --batch --import
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+
+      - run: scripts/build-repo.sh build/debs build/site
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: build/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  verify:
+    needs: [check, deploy]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:13", "ubuntu:26.04"]
+        platform: [linux/amd64, linux/arm64, linux/arm/v7]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm,arm64
+      - run: >-
+          scripts/smoke-test.sh
+          "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+          "${{ matrix.platform }}" "${{ matrix.image }}" "${TAG#v}"
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
+
+  # Recorded last, so a failed run tries again on the next schedule. The commit
+  # also counts towards keeping scheduled workflows enabled.
+  record:
+    needs: [check, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - run: |
+          echo "$TAG" > published-version
+          git add published-version
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(release): publish $TAG"
+          git push origin main
+
+  keepalive:
+    needs: check
+    if: needs.check.outputs.keepalive == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "chore(keepalive): keep scheduled publish enabled"
+          git push origin main

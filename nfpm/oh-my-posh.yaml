@@ -1,0 +1,30 @@
+# Run from the staging directory created by scripts/build-debs.sh, which also sets
+# the values in ${...}.
+name: oh-my-posh
+arch: ${DEB_ARCH}
+platform: linux
+version: ${VERSION}
+release: ${DEB_REVISION}
+section: shells
+priority: optional
+maintainer: oh-my-posh-apt <oh-my-posh-apt@c0dedbad.com>
+homepage: https://ohmyposh.dev
+license: MIT
+description: |-
+  Prompt theme engine for any shell (unofficial package)
+  Oh My Posh renders a customizable prompt for bash, zsh, fish, PowerShell
+  and other shells. This is an unofficial repackaging of the upstream release
+  binary, not affiliated with or supported by the Oh My Posh project.
+suggests:
+  - oh-my-posh-themes
+deb:
+  compression: xz
+contents:
+  - src: ./oh-my-posh
+    dst: /usr/bin/oh-my-posh
+    file_info:
+      mode: 0755
+  - src: ./COPYING
+    dst: /usr/share/doc/oh-my-posh/copyright
+    file_info:
+      mode: 0644

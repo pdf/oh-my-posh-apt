@@ -1,0 +1,27 @@
+# Run from the staging directory created by scripts/build-debs.sh, which also sets
+# the values in ${...}.
+name: oh-my-posh-themes
+arch: all
+platform: linux
+version: ${VERSION}
+release: ${DEB_REVISION}
+section: shells
+priority: optional
+maintainer: oh-my-posh-apt <oh-my-posh-apt@c0dedbad.com>
+homepage: https://ohmyposh.dev
+license: MIT
+description: |-
+  Themes for Oh My Posh (unofficial package)
+  The theme collection from the upstream Oh My Posh release, installed to
+  /usr/share/oh-my-posh/themes. This is an unofficial repackaging, not
+  affiliated with or supported by the Oh My Posh project.
+deb:
+  compression: xz
+contents:
+  - src: ./themes
+    dst: /usr/share/oh-my-posh/themes
+    type: tree
+  - src: ./COPYING
+    dst: /usr/share/doc/oh-my-posh-themes/copyright
+    file_info:
+      mode: 0644

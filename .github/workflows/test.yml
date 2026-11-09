@@ -1,0 +1,43 @@
+# Runs the whole pipeline against the latest upstream release without publishing
+# anything: a throwaway key signs a repo served from the runner itself.
+name: test
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:13", "ubuntu:26.04"]
+        platform: [linux/amd64, linux/arm64, linux/arm/v7]
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm,arm64
+      - run: shellcheck scripts/*.sh
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq aptly unzip
+      - run: sudo scripts/install-nfpm.sh
+      - id: check
+        run: scripts/check-release.sh
+      - run: scripts/fetch-upstream.sh "$TAG" build/upstream
+        env:
+          TAG: ${{ steps.check.outputs.tag }}
+      - run: scripts/build-debs.sh "$TAG" build/upstream build/debs
+        env:
+          TAG: ${{ steps.check.outputs.tag }}
+      - run: gpg --batch --passphrase '' --quick-generate-key 'oh-my-posh-apt <oh-my-posh-apt@c0dedbad.com>' ed25519 sign never
+      - run: scripts/build-repo.sh build/debs build/site
+      - run: python3 -m http.server 8000 --directory build/site >/dev/null 2>&1 &
+      - run: scripts/smoke-test.sh http://localhost:8000 "${{ matrix.platform }}" "${{ matrix.image }}" "${TAG#v}"
+        env:
+          TAG: ${{ steps.check.outputs.tag }}

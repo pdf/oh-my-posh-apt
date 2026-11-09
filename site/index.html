@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>oh-my-posh apt repository (unofficial)</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; line-height: 1.5; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; }
+  pre { padding: 1rem; overflow-x: auto; background: rgba(127, 127, 127, 0.15); border-radius: 0.25rem; }
+</style>
+</head>
+<body>
+<h1>oh-my-posh apt repository (unofficial)</h1>
+<p>Unofficial Debian packages of <a href="https://ohmyposh.dev">Oh My Posh</a>, built automatically from upstream releases. Not affiliated with or supported by the Oh My Posh project.</p>
+<h2>Install</h2>
+<pre><code>sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://pdf.github.io/oh-my-posh-apt/key.gpg | sudo tee /etc/apt/keyrings/oh-my-posh-apt.gpg &gt;/dev/null
+sudo tee /etc/apt/sources.list.d/oh-my-posh-apt.sources &gt;/dev/null &lt;&lt;EOF
+Types: deb
+URIs: https://pdf.github.io/oh-my-posh-apt
+Suites: stable
+Components: main
+Signed-By: /etc/apt/keyrings/oh-my-posh-apt.gpg
+EOF
+sudo apt update &amp;&amp; sudo apt install oh-my-posh</code></pre>
+<p>Source and packaging: <a href="https://github.com/pdf/oh-my-posh-apt">github.com/pdf/oh-my-posh-apt</a></p>
+</body>
+</html>

@@ -27,16 +27,21 @@ Signed-By: /etc/apt/keyrings/oh-my-posh-apt.gpg
 EOF
 
     # A freshly deployed site can be served stale by the CDN for a few minutes.
+    # apt-cache show exits 0 for a version that does not exist, so use madison.
+    in_index() {
+      apt-cache madison "$1" | grep -qF " ${EXPECTED_VERSION}-1 |"
+    }
     for attempt in 1 2 3 4 5 6; do
       apt-get update -qq
-      if apt-cache show "oh-my-posh=${EXPECTED_VERSION}-1" >/dev/null 2>&1; then
+      if in_index oh-my-posh && in_index oh-my-posh-themes; then
         break
       fi
       [ "${attempt}" -lt 6 ] || { echo "version ${EXPECTED_VERSION} not in the index"; exit 1; }
       sleep 60
     done
 
-    apt-get install -y -qq oh-my-posh oh-my-posh-themes >/dev/null
+    apt-get install -y -qq \
+      "oh-my-posh=${EXPECTED_VERSION}-1" "oh-my-posh-themes=${EXPECTED_VERSION}-1" >/dev/null
     actual=$(oh-my-posh --version)
     echo "$(dpkg --print-architecture): oh-my-posh ${actual}"
     [ "${actual}" = "${EXPECTED_VERSION}" ]

@@ -65,7 +65,7 @@ jobs:
             gh release upload "$TAG" build/new-debs/*.deb --clobber
           fi
 
-      - run: scripts/download-published.sh "$GITHUB_REPOSITORY" build/debs
+      - run: scripts/download-published.sh "$GITHUB_REPOSITORY" build/debs "$TAG"
 
       - name: Import signing key
         run: printf '%s\n' "$APT_SIGNING_KEY" | gpg --batch --import

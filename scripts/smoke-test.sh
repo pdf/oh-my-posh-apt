@@ -26,18 +26,24 @@ Components: main
 Signed-By: /etc/apt/keyrings/oh-my-posh-apt.gpg
 EOF
 
-    # A freshly deployed site can be served stale by the CDN for a few minutes.
+    # GitHub Pages serves the site with Cache-Control: max-age=600, so a CDN
+    # edge can keep serving the previous index for up to 10 minutes after a
+    # deploy. Wait past that with a margin.
     # apt-cache show exits 0 for a version that does not exist, so use madison.
+    # Capture its output first: piping into grep -q kills apt-cache with
+    # SIGPIPE on an early match, which pipefail reports as a failure.
     in_index() {
-      apt-cache madison "$1" | grep -qF " ${EXPECTED_VERSION}-1 |"
+      local versions
+      versions=$(apt-cache madison "$1")
+      grep -qF " ${EXPECTED_VERSION}-1 |" <<<"${versions}"
     }
-    for attempt in 1 2 3 4 5 6; do
-      apt-get update -qq
-      if in_index oh-my-posh && in_index oh-my-posh-themes; then
-        break
-      fi
-      [ "${attempt}" -lt 6 ] || { echo "version ${EXPECTED_VERSION} not in the index"; exit 1; }
-      sleep 60
+    deadline=$(($(date +%s) + 900))
+    until apt-get update -qq && in_index oh-my-posh && in_index oh-my-posh-themes; do
+      [ "$(date +%s)" -lt "${deadline}" ] || {
+        echo "version ${EXPECTED_VERSION} not in the index after 15 minutes"
+        exit 1
+      }
+      sleep 30
     done
 
     apt-get install -y -qq \
